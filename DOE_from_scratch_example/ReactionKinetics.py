@@ -1,3 +1,16 @@
+"""
+This example is adapted from the following book
+Reference Book:  Hill, C. G., & Root, T. W. (2014). Introduction to chemical engineering kinetics and reactor design. John Wiley & Sons.
+
+Example 3.1 p.37 "ILLUSTRATION 3.1: Use of a Differential Method to Determine a Pseudo Reaction Rate Expression for the
+Iodine-Catalyzed Bromination of m-Xylene"
+
+The reaction is like this:
+A -> B
+where, A is the reactant, bromine.
+The kinetics data is shown below as a dictionary bromine_data
+"""
+
 import pyomo.environ as pyo
 from pyomo.dae import ContinuousSet, DerivativeVar
 from pyomo.contrib.parmest.experiment import Experiment
@@ -12,6 +25,8 @@ bromine_data = {
            0.1500, 0.1429, 0.1160, 0.1053, 0.0830, 0.0767, 0.0705, 0.0678, 0.0553, 0.0482]
 }
 
+#========================== X ==========================
+# BUILDING THE DOE MODEL / CLASS
 
 class ReactionOrder(Experiment):
     """
@@ -24,21 +39,22 @@ class ReactionOrder(Experiment):
         """
         Arguments:
         data : object containing vital experimental information. dictionary, pandas dataframe
+        CA0 : initial concentration of Br2
         theta_initial : initial values of the parameters theta. dtype: dict
         nfe : number of finite elements
         ncp : number of collocation points
         """
         self.data = data
         self.CA0 = CA0
-        self.nfe = nfe  # number of finite elements
-        self.ncp = ncp  # number of collocation points
+        self.nfe = nfe
+        self.ncp = ncp
         self.model = None
 
         # Defining the parameter values
         if theta_initial is None:
             self.theta_initial = {
-                "k": 0.10,  # rate constant (L/mol)^0.5 /min
-                "n": 1.54  # rxn order
+                "k": 0.10,  # rate constant (L/mol)^0.5 /min, value from the example
+                "n": 1.54  # rxn order, value from the example
             }
         else:
             self.theta_initial = theta_initial
@@ -47,7 +63,7 @@ class ReactionOrder(Experiment):
     ########################################################################
 
     def get_labeled_model(self):
-        # get_labeled_model is a mandatory method in both parmest and DOE.
+        # get_labeled_model is a mandatory method in both ParmEst and DOE.
         if self.model is None:
             self.create_model()
             self.finalize_model()
@@ -63,7 +79,7 @@ class ReactionOrder(Experiment):
 
         m = self.model = pyo.ConcreteModel()
 
-        ########################################################################
+        #################################
         # Define model variables
         # time
         m.t = ContinuousSet(bounds=(0, 63))  # does it matter if we set it as a tuple or as a list?
@@ -75,7 +91,7 @@ class ReactionOrder(Experiment):
         m.k = pyo.Var(domain=pyo.NonNegativeReals)  # rate constant
         m.n = pyo.Var(domain=pyo.NonNegativeReals)  # order of the rxn
 
-        # Differential variable, conc
+        # Differential variable, concentration
         m.dCAdt = DerivativeVar(m.CA, wrt=m.t)
 
         # Expression for rate
@@ -87,6 +103,7 @@ class ReactionOrder(Experiment):
         # End of var and constraint definiton
         ########################################################################
 
+    ####################################################
     def finalize_model(self):
         """
         Finalizing the model. Here, we will set the experimental conditions (e.g, initial conditions),
@@ -103,33 +120,27 @@ class ReactionOrder(Experiment):
         if self.CA0 is None:
             m.CA[0].value = self.data["CA"][0]  # Setting the first value of CA as CA0
         else:
-            # m.CA[0].value = self.CA0
             m.CA[0].fix(self.data["CA"][0])
 
         # Add lower bound of CA[0]
         m.CA[0].setlb(0.01)
         # Add upper bound of CA[0]
-        m.CA[0].setub(0.5)  # let's set the upper bound to 10M
+        m.CA[0].setub(0.5)
 
-        # Control points again
+        # Control points : the points where we want the concentration
         m.t_control = self.data["Time"]
 
         # update model time ``t`` with time range and control time points
-        # t_range??????????????
-        # m.t.update([0, 63])
         m.t.update(m.t_control)
 
-        # Discretizing the model
+        # Since the model is dynamic, we need to discretize it to work. By TransformationFactory we discretize the model
         discr = pyo.TransformationFactory("dae.collocation")
         discr.apply_to(m, nfe=self.nfe, ncp=self.ncp, wrt=m.t)
-        # or nfe = len(self.data.Time) - 1 ???????????????????????
-
-        # solver = pyo.SolverFactory("ipopt")
-        # solver.solve(m, tee=True)
 
         return m
         # End of model finalization
         ####################################################
+
 
     ####################################################
     # Labeling the experiment
@@ -146,15 +157,13 @@ class ReactionOrder(Experiment):
         m.experiment_outputs.update((m.CA[t], None) for t in m.t_control)
         # We don't need the second element of the tuple. We don't care about that element in DOE
 
-        # Add measurement error. Let's assume a constant error of 3% CA.
-        # My next plan is to create a random error between 3% and 10% and see the result
+        # Add measurement error. Let's assume an error of 3% CA.
         m.measurement_error = pyo.Suffix(direction=pyo.Suffix.LOCAL)
-        m.measurement_error.update((m.CA[t], self.data["CA"][i] * 0.03*(19 - i)) for i, t in enumerate(m.t_control))
-        # This makes the higher conc measurement more uncertain
+        m.measurement_error.update((m.CA[t],  0.003) for t in m.t_control)
 
         # Identify design variables
         m.experiment_inputs = pyo.Suffix(direction=pyo.Suffix.LOCAL)
-        # Addd experimental input label for initial concentration
+        # Added experimental input label for initial concentration
         m.experiment_inputs[m.CA[m.t.first()]] = None
 
         # Add unknown parameter labels
@@ -166,24 +175,18 @@ class ReactionOrder(Experiment):
         ####################################################
 
 
-
-
+#========================== X ==========================
+# The DOE example object
 
 def run_reactor_doe():
-    # Create a ReactorOrder object
-    experiment = ReactionOrder(data=bromine_data, nfe=30, ncp=3)
+    # Create a ReactionOrder object
+    experiment = ReactionOrder(data=bromine_data, CA0= None, nfe=30, ncp=3)
 
     # Use the determinant (D-optimality) with scaled sensitivity matrix
     objective_option = "determinant"
     scale_nominal_param_value = True
 
-    # # Create the DesignOfExperiment object
-    # doe_obj = DesignOfExperiments(
-    #     experiment,
-    #     objective_option= objective_option,
-    #     scale_nominal_param_value=scale_nominal_param_value,
-    # )
-
+    # Create the DesignOfExperiment object
     solver = pyo.SolverFactory("ipopt")
     solver.options["linear_solver"] = "MUMPS"
 
@@ -207,7 +210,8 @@ def run_reactor_doe():
     # plot the results
     doe_obj.draw_factorial_figure(
         sensitivity_design_variables=["CA[0]"],
-        fixed_design_variables={},  # What to put as `fixed_design_variables` for single design variable model.
+        fixed_design_variables={},  # If the model has no fixed variable, just put an empty dict.
+        # I think we should add this in the DOE documentation
         title_text="Reaction Order and Rate Constant",
         xlabel_text="CA0",
         log_scale=False,
@@ -226,6 +230,8 @@ def run_reactor_doe():
     print(
         f"\tInitial Concentration: {doe_obj.results['Experiment Design'][0]: 0.2f}"
     )
-    # print("\n Results: \n", doe_obj.results)
+    print("\n Sensitivity Matrix: \n\t", doe_obj.results['Sensitivity Matrix'])
+    print("\n Measurement Error: \n\t", doe_obj.results['Measurement Error'])
+    print("\n Experiment Outputs: \n\t", doe_obj.results['Experiment Outputs'])
 
 run_reactor_doe()
