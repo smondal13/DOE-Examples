@@ -150,7 +150,8 @@ class ReactionOrder(Experiment):
         # My next plan is to create a random error between 3% and 10% and see the result
         m.measurement_error = pyo.Suffix(direction=pyo.Suffix.LOCAL)
         m.measurement_error.update((m.CA[t], self.data["CA"][i] * 0.03*(19 - i)) for i, t in enumerate(m.t_control))
-        # print([self.data["CA"][i] * 0.03 for i, t in enumerate(m.t_control)])
+        # This makes the higher conc measurement more uncertain
+
         # Identify design variables
         m.experiment_inputs = pyo.Suffix(direction=pyo.Suffix.LOCAL)
         # Addd experimental input label for initial concentration
