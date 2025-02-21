@@ -55,7 +55,7 @@ class ReactionOrder(Experiment):
         return self.model
 
     ########################################################################
-    # Create flixible model without data
+    # Create flexible model without data
     def create_model(self):
         """
         Here, we will create different variables, parameters, and constraints
@@ -149,8 +149,8 @@ class ReactionOrder(Experiment):
         # Add measurement error. Let's assume a constant error of 3% CA.
         # My next plan is to create a random error between 3% and 10% and see the result
         m.measurement_error = pyo.Suffix(direction=pyo.Suffix.LOCAL)
-        m.measurement_error.update((m.CA[t], 0.03) for t in m.t_control)
-
+        m.measurement_error.update((m.CA[t], self.data["CA"][i] * 0.03*(19 - i)) for i, t in enumerate(m.t_control))
+        # print([self.data["CA"][i] * 0.03 for i, t in enumerate(m.t_control)])
         # Identify design variables
         m.experiment_inputs = pyo.Suffix(direction=pyo.Suffix.LOCAL)
         # Addd experimental input label for initial concentration
@@ -160,9 +160,8 @@ class ReactionOrder(Experiment):
         m.unknown_parameters = pyo.Suffix(direction=pyo.Suffix.LOCAL)
         m.unknown_parameters.update((p, pyo.value(p)) for p in [m.k, m.n])
 
-        # End of model labeling
-        print('xx')
         return m
+        # End of model labeling
         ####################################################
 
 
