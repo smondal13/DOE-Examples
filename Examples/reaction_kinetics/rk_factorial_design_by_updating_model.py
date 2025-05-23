@@ -74,6 +74,7 @@ def run_reactor_doe():
     for conc in CA0_values:
         experiment.data["CA"][0] = conc
         if experiment.model is not None:
+            print("updating model ")
             experiment.update_model(CA0=conc)
         # experiment.CA0 = conc
         doe_obj = DesignOfExperiments(
